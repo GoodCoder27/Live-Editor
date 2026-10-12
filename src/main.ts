@@ -44,7 +44,7 @@ requestAnimationFrame(() => {
 // websocket
 interface ClientMessage {
     action:
-        | "create_room"
+        | "join_room"
         | "code_change"
         | "cursor_change"
         | "user_joined"
@@ -67,8 +67,8 @@ ws.onopen = () => {
 
     // Send a typed message serialized to JSON
     const message: ClientMessage = {
-        action: "create_room",
-        data: "ABC123",
+        action: "join_room",
+        data: JSON.stringify({room_id: "ABC123", user_id: crypto.randomUUID(),}),
     };
 
     ws.send(JSON.stringify(message));
@@ -94,10 +94,9 @@ ws.onerror = (error: Event) => {
 
 const model = editor.getModel();
 captureChange(model, (change) => {
-    const code: string = change.currentCode;
     const message: ClientMessage = {
         action: "code_change",
-        data: code, 
+        data: JSON.stringify({change}), 
     };
 
     if (ws.readyState === WebSocket.OPEN) {

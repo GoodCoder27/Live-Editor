@@ -1,9 +1,9 @@
 import * as monaco from "monaco-editor";
 
 export interface CodeChange {
-  currentCode: string;
-  rangeOffset: number;
-  rangeLength: number;
+  //currentCode: string;
+  range_offset: number;
+  range_length: number;
   text: string;
 };
 
@@ -32,9 +32,9 @@ export function captureChange(model: monaco.editor.ITextModel | null, onChange: 
         return;
       
       const change: CodeChange = {
-        currentCode: currentCode,
-        rangeOffset: event.changes[event.changes.length-1].rangeOffset,
-        rangeLength: event.changes[event.changes.length-1].rangeLength,
+        // currentCode: currentCode,
+        range_offset: event.changes[event.changes.length-1].rangeOffset,
+        range_length: event.changes[event.changes.length-1].rangeLength,
         text: event.changes[event.changes.length-1].text
       };
 
