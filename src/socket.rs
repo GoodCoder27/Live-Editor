@@ -112,7 +112,7 @@ fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager, t
             let room_id: RoomId = join_data.room_id; 
                         
             if RoomManager::add_user(manager, &room_id, user_id.clone(), tx.clone()) == false {
-                RoomManager::create_room(manager, room_id.clone(), user_id.clone(), String::new(), HashMap::new())
+                RoomManager::create_room(manager, room_id.clone(), user_id.clone(), String::new(), tx.clone());
             }
 
             let response: ServerMessage = ServerMessage {

@@ -34,7 +34,11 @@ impl RoomManager {
         }
     }
 
-    pub fn create_room(&mut self, id: RoomId, writer: UserId, source: String, users: HashMap<UserId, User>) {
+    pub fn create_room(&mut self, id: RoomId, writer: UserId, source: String, tx: UnboundedSender<String>) {
+        let writer_user: User = User::new(writer.clone(), tx);
+        let mut users: HashMap<UserId, User> = HashMap::new();
+        users.insert(writer.clone(), writer_user);
+
         let room = Room {
             id: id.clone(),
             writer,
