@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use tokio::sync::mpsc::{self, UnboundedSender};
+
 pub type RoomId = String;
 pub type UserId = String;
 
@@ -12,10 +14,17 @@ pub struct Room {
 
 pub struct User {
     id: UserId,
+    tx: mpsc::UnboundedSender<String>,
 }
 
 pub struct RoomManager {
-    rooms: HashMap<RoomId, Room>,
+    pub rooms: HashMap<RoomId, Room>,
+}
+
+impl User {
+    pub fn new(id: UserId, tx: UnboundedSender<String>) -> Self {
+        User { id , tx }
+    }
 }
 
 impl RoomManager {
@@ -25,9 +34,7 @@ impl RoomManager {
         }
     }
 
-    pub fn create_room(&mut self, writer: UserId, source: String, users: HashMap<UserId, User>) {
-        let id: RoomId = Self::create_id();
-
+    pub fn create_room(&mut self, id: RoomId, writer: UserId, source: String, users: HashMap<UserId, User>) {
         let room = Room {
             id: id.clone(),
             writer,
@@ -36,12 +43,33 @@ impl RoomManager {
         };
         self.rooms.insert(id, room);
     }
-    fn create_id() -> RoomId {
-        "ABC123".to_string()
+
+    pub fn broadcast(&self, room_id: &RoomId,  message: &String) {
+        let Some(room) = self.rooms.get(room_id) else {
+            return;
+        };
+
+        for user in room.users.values() {
+            if let Err(error) = user.tx.send(message.to_string()) {
+                eprintln!("Failed to send to user: {error}");   
+            }
+        }
     }
-    
-    pub fn add_user(&mut self, mut room: Room, user_id: UserId) {
-        let user: User = User { id: user_id.clone() };
-        room.users.insert(user_id, user);
+
+    pub fn change_source(&mut self, id: RoomId) {
+        
+    }
+     
+    pub fn add_user(&mut self, room_id: &RoomId, user_id: UserId, tx: UnboundedSender<String>) -> bool {
+        let user = User::new(user_id.clone(), tx);
+        if let Some(room) = self.rooms.get_mut(room_id) {
+            room.users.insert(user_id.clone(), user);
+            return true;
+        }
+        return false;
+    }
+
+    pub fn remove_user(&mut self, room_id: &RoomId, user_id: UserId) {
+        
     }
 }
