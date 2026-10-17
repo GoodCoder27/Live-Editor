@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use futures_util::{SinkExt, StreamExt};
 
-use crate::{AppState, room::{self, RoomId}};
+use crate::{AppState, room::{self, CodeChange, RoomId}};
 use crate::room::{UserId, RoomManager};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -63,14 +63,10 @@ pub async fn handle_socket(socket: WebSocket, manager: AppState,
                         }
                     };
 
-                let (response, joined) = {
+                let response = {
                     let mut mn = manager.lock().await;
-                    process_message(client_msg, &mut mn, &tx)
-                };
-                if let Some((room_id, user_id)) = joined {
-                    membership = Some((room_id, user_id));
-                }
-                
+                    process_message(client_msg, &mut mn, &tx, &mut membership)
+                };                
                 let json = serde_json::to_string(&response)
                     .expect("Failed to serialize response");
 
@@ -100,18 +96,18 @@ pub async fn handle_socket(socket: WebSocket, manager: AppState,
     }
 }
 
-fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager, tx: &UnboundedSender<String>)
-        -> (ServerMessage, Option<(RoomId, UserId)>)  {
+fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager,
+    tx: &UnboundedSender<String>, membership: &mut Option<(RoomId, UserId)>) -> ServerMessage {
     match client_msg.action.as_str() {
         "join_room" => {
             let join_data: JoinRoomData = 
                 match serde_json::from_str(&client_msg.data) {
                     Ok(data) => data,
                     Err(e) => {
-                        return (ServerMessage {
+                        return ServerMessage {
                         status: "error".to_string(),
                         data: format!("Invalid join-room data: {e}")
-                        }, None);
+                        };
                     }
                 };
 
@@ -128,49 +124,70 @@ fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager, t
             };
             let json = serde_json::to_string(&response).expect("Failed to serialize server message");
             RoomManager::broadcast(manager, &room_id, &json);
+            *membership = Some((room_id.clone(), user_id.clone()));
             
-            return (ServerMessage {
+            return ServerMessage {
                 status: "success".to_string(),
                 data: format!("User {} has joined room {}", user_id, room_id),
-            }, Some((room_id, user_id)));
+            };
         },
         "code_change" => {
-           return (ServerMessage {
+            let code_data: CodeChange = 
+                match serde_json::from_str(&client_msg.data) {
+                    Ok(data) => data,
+                    Err(e) => {
+                        return ServerMessage {
+                        status: "error".to_string(),
+                        data: format!("Invalid code data: {e}")
+                        };
+                    }
+                };
+            
+            if let Some((room_id, user_id)) = membership {
+                manager.change_source(room_id, user_id, code_data.clone());
+                let message = serde_json::json!({
+                    "action": "code_update",
+                    "user_id": user_id,
+                    "change": code_data,
+                });
+                RoomManager::broadcast(manager, room_id, &message.to_string());
+            }
+            return ServerMessage {
                 status: "success".to_string(),
                 data: format!("Code change received, {}", client_msg.data)
-            }, None);
+            };
         },
         "cursor_change" => {
-            return (ServerMessage {
+            return ServerMessage {
                 status: "success".to_string(),
                 data: "Cursor moved".to_string()
-            }, None);
+            };
         },
         "user_joined" => {
-            return (ServerMessage {
+            return ServerMessage {
                 status: "success".to_string(),
                 data: format!("New User {} joined the room", client_msg.data)
-            }, None);
+            };
         },
         "user_left" => {
-            return (ServerMessage {
+            return ServerMessage {
                 status: "success".to_string(),
                 data: format!("User {} left the room", client_msg.data)
-            }, None);
+            };
         }
         "run" => {
-            return (ServerMessage {
+            return ServerMessage {
                 status: "success".to_string(),
                 data: format!("running code: {}", client_msg.data)
-            }, None);
+            };
         },
         "output" => {
-            return (ServerMessage {
+            return ServerMessage {
                 status: "success".to_string(),
                 data: "outputing the result".to_string()
-            }, None);
+            };
         },
-        _ => { return (ServerMessage { status: "error".to_string(), data: format!("Uknown action: {}", client_msg.action)}, None) }
+        _ => ServerMessage { status: "error".to_string(), data: format!("Uknown action: {}", client_msg.action) } 
     }
 }
 /*

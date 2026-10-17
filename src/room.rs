@@ -1,9 +1,17 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{self, UnboundedSender};
 
 pub type RoomId = String;
 pub type UserId = String;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeChange {
+    range_offset: u32,
+    range_length: u32,
+    text: String,
+}
 
 pub struct Room {
     id: RoomId,
@@ -60,8 +68,20 @@ impl RoomManager {
         }
     }
 
-    pub fn change_source(&mut self, id: RoomId) {
-        
+    pub fn change_source(&mut self, room_id: &RoomId, user_id: &UserId, change: CodeChange) {
+        // CodeChange -> range_offset (place where text is place)
+        //            -> range_length (range of text that is placed) -> Applies only to deletion
+        //            -> the text itself
+
+        if let Some(room) = self.rooms.get_mut(room_id) {
+            if room.writer == user_id.to_string() {
+                if change.range_length != 0 {
+                    room.source.replace_range((change.range_offset as usize)..((change.range_length+change.range_offset) as usize), &change.text);
+                } else {
+                    room.source.insert_str(change.range_offset as usize, &change.text);
+                }
+            }
+        }
     }
      
     pub fn add_user(&mut self, room_id: &RoomId, user_id: UserId, tx: UnboundedSender<String>) -> bool {
