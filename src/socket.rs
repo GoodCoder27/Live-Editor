@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use axum::{
     extract::{State, ws::{Message, WebSocket, WebSocketUpgrade}}, response::IntoResponse,
 };
@@ -8,7 +6,7 @@ use tokio::sync::mpsc::{self, UnboundedSender};
 use futures_util::{SinkExt, StreamExt};
 
 use crate::{AppState, room::{self, RoomId}};
-use crate::room::{User, UserId, RoomManager, Room};
+use crate::room::{UserId, RoomManager};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ClientMessage {
@@ -28,7 +26,6 @@ pub struct ServerMessage {
     data: String,
 }
 
-
 pub async fn ws_handler(ws: WebSocketUpgrade, State(manager): State<AppState>) -> impl IntoResponse {
     let (tx, rx) = mpsc::unbounded_channel::<String>();
     // Upgrade the connection to a WebSocket
@@ -39,6 +36,8 @@ pub async fn handle_socket(socket: WebSocket, manager: AppState,
     mut rx: mpsc::UnboundedReceiver<String>, tx: mpsc::UnboundedSender<String>) {
     let (mut sender, mut receiver) = socket.split();
 
+    let mut membership: Option<(RoomId, UserId)> = None;
+    
     loop {
         tokio::select! {
             incoming = receiver.next() => {
@@ -64,10 +63,14 @@ pub async fn handle_socket(socket: WebSocket, manager: AppState,
                         }
                     };
 
-                let response = {
+                let (response, joined) = {
                     let mut mn = manager.lock().await;
                     process_message(client_msg, &mut mn, &tx)
                 };
+                if let Some((room_id, user_id)) = joined {
+                    membership = Some((room_id, user_id));
+                }
+                
                 let json = serde_json::to_string(&response)
                     .expect("Failed to serialize response");
 
@@ -89,22 +92,26 @@ pub async fn handle_socket(socket: WebSocket, manager: AppState,
                 }
             }
         }
-
-        // Remove User connection
+    }
+    // Remove User connection
+    if let Some((room_id, user_id)) = membership {
+        let mut mn = manager.lock().await;
+        mn.remove_user(&room_id, user_id);
     }
 }
 
-fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager, tx: &UnboundedSender<String>) -> ServerMessage {
+fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager, tx: &UnboundedSender<String>)
+        -> (ServerMessage, Option<(RoomId, UserId)>)  {
     match client_msg.action.as_str() {
         "join_room" => {
             let join_data: JoinRoomData = 
                 match serde_json::from_str(&client_msg.data) {
                     Ok(data) => data,
                     Err(e) => {
-                        return ServerMessage {
+                        return (ServerMessage {
                         status: "error".to_string(),
                         data: format!("Invalid join-room data: {e}")
-                        };
+                        }, None);
                     }
                 };
 
@@ -122,48 +129,58 @@ fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager, t
             let json = serde_json::to_string(&response).expect("Failed to serialize server message");
             RoomManager::broadcast(manager, &room_id, &json);
             
-            return ServerMessage {
+            return (ServerMessage {
                 status: "success".to_string(),
                 data: format!("User {} has joined room {}", user_id, room_id),
-            };
+            }, Some((room_id, user_id)));
         },
         "code_change" => {
-           return ServerMessage {
+           return (ServerMessage {
                 status: "success".to_string(),
                 data: format!("Code change received, {}", client_msg.data)
-            };
+            }, None);
         },
-        "cursor_change" => ServerMessage {
-            status: "success".to_string(),
-            data: "Cursor moved".to_string()
+        "cursor_change" => {
+            return (ServerMessage {
+                status: "success".to_string(),
+                data: "Cursor moved".to_string()
+            }, None);
         },
-        "user_joined" => ServerMessage {
-            status: "success".to_string(),
-            data: format!("New User {} joined the room", client_msg.data)
+        "user_joined" => {
+            return (ServerMessage {
+                status: "success".to_string(),
+                data: format!("New User {} joined the room", client_msg.data)
+            }, None);
         },
-        "user_left" => ServerMessage {
-            status: "success".to_string(),
-            data: format!("User {} left the room", client_msg.data)
+        "user_left" => {
+            return (ServerMessage {
+                status: "success".to_string(),
+                data: format!("User {} left the room", client_msg.data)
+            }, None);
+        }
+        "run" => {
+            return (ServerMessage {
+                status: "success".to_string(),
+                data: format!("running code: {}", client_msg.data)
+            }, None);
         },
-        "run" => ServerMessage {
-            status: "success".to_string(),
-            data: format!("running code: {}", client_msg.data)
+        "output" => {
+            return (ServerMessage {
+                status: "success".to_string(),
+                data: "outputing the result".to_string()
+            }, None);
         },
-        "output" => ServerMessage {
-            status: "success".to_string(),
-            data: "outputing the result".to_string()
-        },
-        _ => ServerMessage { status: "error".to_string(), data: format!("Uknown action: {}", client_msg.action) }
+        _ => { return (ServerMessage { status: "error".to_string(), data: format!("Uknown action: {}", client_msg.action)}, None) }
     }
 }
-
+/*
+this is a working example of a simple websocket
 async fn send_response(socket: &mut WebSocket, response: ServerMessage) -> Result<(), axum::Error> {
     let json = serde_json::to_string(&response).expect("Failed to serialize server message");
 
     socket.send(Message::Text(json.into())).await
 }
 
-/* this is a working example of a simple websocket
     while let Some(result) = socket.recv().await {
         let msg = match result {
             Ok(msg) => msg,

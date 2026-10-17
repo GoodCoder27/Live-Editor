@@ -74,6 +74,17 @@ impl RoomManager {
     }
 
     pub fn remove_user(&mut self, room_id: &RoomId, user_id: UserId) {
-        
+        if let Some(room) = self.rooms.get_mut(room_id) {
+            if room.writer == user_id {
+                if let Some(user_id) = room.users.keys().nth(1) {
+                    room.writer = user_id.clone();
+                }
+            }
+            room.users.remove(&user_id);
+            if room.users.is_empty() {
+                self.rooms.remove(room_id);
+            }
+            println!("Removed user, {} from room, {}", user_id, room_id);
+        }
     }
 }
