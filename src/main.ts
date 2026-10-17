@@ -1,9 +1,13 @@
 import "./style.css";
-import { createEditor, captureChange } from "./editor.ts";
+import { createEditor, captureChange, applyChange } from "./editor.ts";
 import { initSplits, updateHorizontalSplit } from "./layout.ts";
 import { initMobileTabs, ensureDefaultMobilePane } from "./tabs.ts";
 
+// UserId
+const userId = crypto.randomUUID();
+
 // 1. Initialize Monaco Editor
+let applyingRemoteChange = false;
 const container = document.getElementById("editor")!;
 const editor = createEditor(container);
 
@@ -68,7 +72,7 @@ ws.onopen = () => {
     // Send a typed message serialized to JSON
     const message: ClientMessage = {
         action: "join_room",
-        data: JSON.stringify({room_id: "ABC123", user_id: crypto.randomUUID(),}),
+        data: JSON.stringify({room_id: "ABC123", user_id: userId,}),
     };
 
     ws.send(JSON.stringify(message));
@@ -77,7 +81,18 @@ ws.onopen = () => {
 ws.onmessage = (event: MessageEvent) => {
     try {
         // Parse incoming JSON from Rust
-        const response: ServerMessage = JSON.parse(event.data);
+        const response = JSON.parse(event.data);
+        if (response.action == "code_update") {
+            if (response.user_id == userId) {
+                return;
+            }
+            applyingRemoteChange = true;
+            try {
+                applyChange(editor, response.change);
+            } finally {
+                applyingRemoteChange = false;
+            }
+        }
         console.log("Received from server:", response);
     } catch (error) {
         console.error("Failed to parse incoming message:", error);
@@ -93,12 +108,15 @@ ws.onerror = (error: Event) => {
 };
 
 const model = editor.getModel();
-captureChange(model, (change) => {
+captureChange(model, applyingRemoteChange, (change) => {
     const message: ClientMessage = {
         action: "code_change",
-        data: JSON.stringify({change}), 
+        data: JSON.stringify(change), 
     };
 
+    if (applyingRemoteChange)
+        return;
+        
     if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(message));
     }

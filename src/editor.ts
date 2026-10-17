@@ -15,8 +15,8 @@ export function createEditor(container: HTMLElement) {
   });
 }
 
-export function captureChange(model: monaco.editor.ITextModel | null, onChange: (change: CodeChange) => void) {
-  if (!model) {
+export function captureChange(model: monaco.editor.ITextModel | null, applyingRemoteChange: boolean, onChange: (change: CodeChange) => void) {
+  if (!model || applyingRemoteChange) {
     return;
   }
   const changeDisposable = model.onDidChangeContent((event: monaco.editor.IModelContentChangedEvent) => {
@@ -33,12 +33,29 @@ export function captureChange(model: monaco.editor.ITextModel | null, onChange: 
       
       const change: CodeChange = {
         // currentCode: currentCode,
-        range_offset: event.changes[event.changes.length-1].rangeOffset,
-        range_length: event.changes[event.changes.length-1].rangeLength,
-        text: event.changes[event.changes.length-1].text
+        range_offset: lastChange.rangeOffset,
+        range_length: lastChange.rangeLength,
+        text: lastChange.text
       };
 
       onChange(change);
   });
   return changeDisposable;
+}
+
+export function applyChange(editor: monaco.editor.IStandaloneCodeEditor, change: CodeChange) {
+  const model = editor.getModel()!;
+  const start = model.getPositionAt(change.range_offset);
+  const end = model.getPositionAt(change.range_offset + change.range_length);
+  
+  editor.executeEdits("remote", [{
+    range: new monaco.Range(
+      start.lineNumber,
+      start.column,
+      end.lineNumber,
+      end.column
+    ),
+    text: change.text,
+    forceMoveMarkers: true,
+  }]);
 }
