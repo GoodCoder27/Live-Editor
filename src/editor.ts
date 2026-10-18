@@ -7,6 +7,12 @@ export interface CodeChange {
   text: string;
 };
 
+// readOnly: true
+// editor.updateOptions({
+//readOnly: true
+// });
+// editor-delta-decorations
+
 export function createEditor(container: HTMLElement) {
   return monaco.editor.create(container, {
     language: "cpp",
@@ -58,4 +64,74 @@ export function applyChange(editor: monaco.editor.IStandaloneCodeEditor, change:
     text: change.text,
     forceMoveMarkers: true,
   }]);
+}
+
+export function updateRemoteCursor(
+    editor: monaco.editor.IStandaloneCodeEditor,
+    userId: string,
+    lineNumber: number,
+    column: number,
+    remoteCursors: Map<string, monaco.editor.IEditorDecorationsCollection>
+) {
+    const model = editor.getModel();
+    if (!model) return;
+
+    let cursor = remoteCursors.get(userId);
+
+    if (!cursor) {
+        cursor = editor.createDecorationsCollection();
+        remoteCursors.set(userId, cursor);
+    }
+
+    const position = model.validatePosition({
+        lineNumber,
+        column,
+    });
+
+    cursor.set([{
+        range: new monaco.Range(
+            position.lineNumber,
+            position.column,
+            position.lineNumber,
+            position.column,
+        ),
+        options: {
+            beforeContentClassName: "remote-cursor",
+        },
+    }]);
+}
+
+export function updateRemoteSelection(
+    editor: monaco.editor.IStandaloneCodeEditor,
+    userId: string,
+    startLine: number,
+    startColumn: number,
+    endLine: number,
+    endColumn: number,
+    remoteSelections: Map<string, monaco.editor.IEditorDecorationsCollection>,
+){
+    const model = editor.getModel();
+    if (!model) return;
+
+    let decoration = remoteSelections.get(userId);
+
+    if (!decoration) {
+        decoration = editor.createDecorationsCollection();
+        remoteSelections.set(userId, decoration);
+    }
+
+    const range = new monaco.Range(
+        startLine,
+        startColumn,
+        endLine,
+        endColumn,
+    );
+
+    decoration.set([{
+        range: model.validateRange(range),
+        options: {
+            className: "remote-selection",
+            isWholeLine: false,
+        },
+    }]);
 }

@@ -1,7 +1,8 @@
 import "./style.css";
-import { createEditor, captureChange, applyChange } from "./editor.ts";
+import { createEditor, captureChange, applyChange, updateRemoteCursor, updateRemoteSelection } from "./editor.ts";
 import { initSplits, updateHorizontalSplit } from "./layout.ts";
 import { initMobileTabs, ensureDefaultMobilePane } from "./tabs.ts";
+import * as monaco from "monaco-editor"
 
 // UserId
 const userId = crypto.randomUUID();
@@ -44,6 +45,19 @@ window.addEventListener('resize', () => {
 requestAnimationFrame(() => {
   editor?.layout();
 });
+
+// show cursors
+const remoteCursors = new Map<
+    string,
+    monaco.editor.IEditorDecorationsCollection
+>();
+const remoteSelections = new Map<
+    string,
+    monaco.editor.IEditorDecorationsCollection
+>();
+editor.setValue("Hello world!");
+updateRemoteCursor(editor, userId, 1, 3, remoteCursors);
+updateRemoteSelection(editor, userId, 1, 1, 1, 3, remoteSelections)
 
 // websocket
 interface ClientMessage {

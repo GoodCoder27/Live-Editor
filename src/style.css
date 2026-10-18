@@ -187,6 +187,36 @@ body {
   }
 }
 
+.remote-cursor {
+    position: relative;
+}
+
+.remote-cursor::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    top: -1.0em;
+    height: 2.3em;
+    border-left: 2px solid #a3e635;
+    pointer-events: none;
+}
+
+.remote-cursor::after {
+    content: "";
+    position: absolute;
+    left: -4px;
+    top: -1.1em;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #a3e635;
+    pointer-events: none;
+}
+
+.remote-selection {
+    background-color: rgba(163, 230, 53, 0.3);
+}
+
 /* :root { */
   /* --text: #6b6375; */
   /* --text-h: #08060d; */
