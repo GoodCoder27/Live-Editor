@@ -6,6 +6,7 @@ import * as monaco from "monaco-editor"
 
 // UserId
 const userId = crypto.randomUUID();
+const writer: boolean = true;
 
 // 1. Initialize Monaco Editor
 let applyingRemoteChange = false;
@@ -56,8 +57,8 @@ const remoteSelections = new Map<
     monaco.editor.IEditorDecorationsCollection
 >();
 editor.setValue("Hello world!");
-updateRemoteCursor(editor, userId, 1, 3, remoteCursors);
-updateRemoteSelection(editor, userId, 1, 1, 1, 3, remoteSelections)
+//updateRemoteCursor(editor, userId, 1, 3, remoteCursors);
+//updateRemoteSelection(editor, userId, 1, 1, 1, 3, remoteSelections);
 
 // websocket
 interface ClientMessage {
@@ -107,7 +108,27 @@ ws.onmessage = (event: MessageEvent) => {
                 applyingRemoteChange = false;
             }
         }
+        if (response.action == "cursor_update") {
+            console.log("Cursor moved");
+            if (response.user_id == userId) {
+                return;
+            }
+            if (response.change.selection != null) {
+                const selection = response.change.selection;           
+                updateRemoteSelection(editor, userId, selection.startLine, selection.startColumn,
+                        selection.endLine, selection.endColumn, remoteSelections);
+            } else {
+                updateRemoteCursor(editor, userId, response.change.cursor.line, response.change.cursor.column, remoteCursors);
+                updateRemoteSelection(editor, userId, 0, 0, 0, 0, remoteSelections);
+            }
+        }
         console.log("Received from server:", response);
+        if (response.action == "join_room") {
+            if (response.writer == true) {
+                //writer = true;
+                console.log("writer joined the room");
+            }
+        }
     } catch (error) {
         console.error("Failed to parse incoming message:", error);
     }
@@ -133,6 +154,46 @@ captureChange(model, applyingRemoteChange, (change) => {
         
     if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(message));
+    }
+});
+// capture selection and cursor change
+editor.onDidChangeCursorSelection((event) => {
+    const selection = event.selection;
+    if (writer) {
+        let message: ClientMessage;
+
+        if (selection.isEmpty()) {
+            message = {
+                action: "cursor_change",
+                data: JSON.stringify({
+                    cursor: {
+                        column: selection.positionColumn,
+                        line: selection.positionLineNumber,
+                    },
+                    selection: null,
+                }),
+            };
+        } else {
+            message = {
+                action: "cursor_change",
+                data: JSON.stringify({
+                    cursor: {
+                        column: selection.positionColumn,
+                        line: selection.positionLineNumber,
+                    },
+                    selection: {
+                        startColumn: selection.startColumn,
+                        startLine: selection.startLineNumber,
+                        endColumn: selection.endColumn,
+                        endLine: selection.endLineNumber,
+                    },
+                }),
+            };
+        }
+               
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(message));
+        }
     }
 });
 
