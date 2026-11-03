@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use futures_util::{SinkExt, StreamExt};
 
-use crate::{AppState, room::{self, CodeChange, RoomId}};
+use crate::{AppState, room::{self, CodeChange, CursorChange, RoomId}};
 use crate::room::{UserId, RoomManager};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -113,16 +113,18 @@ fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager,
 
             let user_id: UserId = join_data.user_id;
             let room_id: RoomId = join_data.room_id; 
-                        
+            let mut writer: bool = false;
+        
             if RoomManager::add_user(manager, &room_id, user_id.clone(), tx.clone()) == false {
                 RoomManager::create_room(manager, room_id.clone(), user_id.clone(), String::new(), tx.clone());
+                writer = true;
             }
-
-            let response: ServerMessage = ServerMessage {
-                status: "success".to_string(),
-                data: format!("New user {} has joined room {}", user_id, room_id),
-            };
-            let json = serde_json::to_string(&response).expect("Failed to serialize server message");
+            let message = serde_json::json!({
+                "action": "join_room",
+                "user_id": user_id,
+                "writer": writer,
+            });
+            let json = serde_json::to_string(&message).expect("Failed to serialize server message");
             RoomManager::broadcast(manager, &room_id, &json);
             *membership = Some((room_id.clone(), user_id.clone()));
             
@@ -137,8 +139,8 @@ fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager,
                     Ok(data) => data,
                     Err(e) => {
                         return ServerMessage {
-                        status: "error".to_string(),
-                        data: format!("Invalid code data: {e}")
+                            status: "error".to_string(),
+                            data: format!("Invalid code data: {e}")
                         };
                     }
                 };
@@ -158,6 +160,27 @@ fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager,
             };
         },
         "cursor_change" => {
+            let cursor: CursorChange =
+                match serde_json::from_str(&client_msg.data) {
+                    Ok(data) => data,
+                    Err(e) => {
+                        return ServerMessage {
+                            status: "error".to_string(),
+                            data: format!("Invalid cursor data: {e}")
+                        };
+                    }
+                };
+
+            if let Some((room_id, user_id)) = membership {
+                manager.update_position(room_id, user_id, cursor.clone());
+                let message = serde_json::json!({
+                    "action": "cursor_update",
+                    "user_id": user_id,
+                    "change": cursor,
+                });
+                RoomManager::broadcast(manager, room_id, &message.to_string());
+            }
+            
             return ServerMessage {
                 status: "success".to_string(),
                 data: "Cursor moved".to_string()

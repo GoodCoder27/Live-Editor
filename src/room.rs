@@ -13,9 +13,37 @@ pub struct CodeChange {
     text: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CursorLoc {
+    line: u32,
+    column: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Selection {
+    #[serde(rename = "startLine")]
+    start_line: u32,
+
+    #[serde(rename = "startColumn")]
+    start_column: u32,
+
+    #[serde(rename = "endLine")]
+    end_line: u32,
+
+    #[serde(rename = "endColumn")]
+    end_column: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CursorChange {
+    cursor: CursorLoc,
+    selection: Option<Selection>,
+}
+
 pub struct Room {
     id: RoomId,
     writer: UserId,
+    cursor: CursorChange,
     source: String,
     users: HashMap<UserId, User>,
 }
@@ -52,6 +80,7 @@ impl RoomManager {
             writer,
             source,
             users,
+            cursor: CursorChange { cursor: CursorLoc { line: 1, column: 1 }, selection: None },
         };
         self.rooms.insert(id, room);
     }
@@ -79,6 +108,19 @@ impl RoomManager {
                     room.source.replace_range((change.range_offset as usize)..((change.range_length+change.range_offset) as usize), &change.text);
                 } else {
                     room.source.insert_str(change.range_offset as usize, &change.text);
+                }
+            }
+        }
+    }
+
+    pub fn update_position(&mut self, room_id: &RoomId, user_id: &UserId, cursor_data: CursorChange) {
+        if let Some(room) = self.rooms.get_mut(room_id) {
+            if room.writer == user_id.to_string() {
+                if let Some(selection) = cursor_data.selection {
+                    room.cursor.selection = Some(selection);
+                } else {
+                    room.cursor.selection = None;
+                    room.cursor.cursor = cursor_data.cursor;
                 }
             }
         }
