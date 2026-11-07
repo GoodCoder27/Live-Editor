@@ -195,19 +195,19 @@ body {
     content: "";
     position: absolute;
     left: -1px;
-    top: -1.0em;
-    height: 2.3em;
-    border-left: 2px solid #a3e635;
+    top: 0;
+    height: 1.2em;
+    border-left: 3px solid #a3e635;
     pointer-events: none;
 }
 
 .remote-cursor::after {
     content: "";
     position: absolute;
-    left: -4px;
-    top: -1.1em;
-    width: 6px;
-    height: 6px;
+    left: -2px;
+    top: 0;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
     background-color: #a3e635;
     pointer-events: none;

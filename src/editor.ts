@@ -18,6 +18,7 @@ export function createEditor(container: HTMLElement) {
     language: "cpp",
     theme: "vs-dark",
     automaticLayout: false,
+    readOnly: true
   });
 }
 
@@ -51,19 +52,22 @@ export function captureChange(model: monaco.editor.ITextModel | null, applyingRe
 
 export function applyChange(editor: monaco.editor.IStandaloneCodeEditor, change: CodeChange) {
   const model = editor.getModel()!;
-  const start = model.getPositionAt(change.range_offset);
-  const end = model.getPositionAt(change.range_offset + change.range_length);
-  
-  editor.executeEdits("remote", [{
-    range: new monaco.Range(
-      start.lineNumber,
-      start.column,
-      end.lineNumber,
-      end.column
-    ),
-    text: change.text,
-    forceMoveMarkers: true,
-  }]);
+
+    const start = model.getPositionAt(change.range_offset);
+    const end = model.getPositionAt(
+        change.range_offset + change.range_length
+    );
+
+    model.applyEdits([{
+        range: new monaco.Range(
+            start.lineNumber,
+            start.column,
+            end.lineNumber,
+            end.column
+        ),
+        text: change.text,
+        forceMoveMarkers: true,
+    }]);
 }
 
 export function updateRemoteCursor(

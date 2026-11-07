@@ -6,7 +6,7 @@ import * as monaco from "monaco-editor"
 
 // UserId
 const userId = crypto.randomUUID();
-const writer: boolean = true;
+let writer: boolean = false;
 
 // 1. Initialize Monaco Editor
 let applyingRemoteChange = false;
@@ -56,7 +56,6 @@ const remoteSelections = new Map<
     string,
     monaco.editor.IEditorDecorationsCollection
 >();
-editor.setValue("Hello world!");
 //updateRemoteCursor(editor, userId, 1, 3, remoteCursors);
 //updateRemoteSelection(editor, userId, 1, 1, 1, 3, remoteSelections);
 
@@ -117,6 +116,7 @@ ws.onmessage = (event: MessageEvent) => {
                 const selection = response.change.selection;           
                 updateRemoteSelection(editor, userId, selection.startLine, selection.startColumn,
                         selection.endLine, selection.endColumn, remoteSelections);
+                updateRemoteCursor(editor, userId, response.change.cursor.line, response.change.cursor.column, remoteCursors);
             } else {
                 updateRemoteCursor(editor, userId, response.change.cursor.line, response.change.cursor.column, remoteCursors);
                 updateRemoteSelection(editor, userId, 0, 0, 0, 0, remoteSelections);
@@ -125,7 +125,10 @@ ws.onmessage = (event: MessageEvent) => {
         console.log("Received from server:", response);
         if (response.action == "join_room") {
             if (response.writer == true) {
-                //writer = true;
+                editor.updateOptions({
+                    readOnly: false
+                });
+                writer = true;
                 console.log("writer joined the room");
             }
         }
