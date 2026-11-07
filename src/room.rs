@@ -101,7 +101,6 @@ impl RoomManager {
         // CodeChange -> range_offset (place where text is place)
         //            -> range_length (range of text that is placed) -> Applies only to deletion
         //            -> the text itself
-
         if let Some(room) = self.rooms.get_mut(room_id) {
             if room.writer == user_id.to_string() {
                 if change.range_length != 0 {
