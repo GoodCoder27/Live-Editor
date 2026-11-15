@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>live-ide</title>
+  </head>
+  <body>
+    <div id="topbar">
+      <button class="top-item" id="home">HOME</button>
+      <button class="top-item" id="file">v FILE</button>
+      <button class="top-item" id="run">RUN</button>
+      <button class="top-item" id="credit">GITHUB</button>      
+      <button class="top-item" id="share">SHARE</button>
+    </div>
+    <div class="main-area" id="main-area">
+      <!-- Mobile Tab Switcher (Only visible on small screens) -->
+      <div class="mobile-tab-bar">
+        <button class="mobile-tab active" data-target="editor">Editor</button>
+        <button class="mobile-tab" data-target="io-box">Input/Output</button>
+      </div>
+
+      <div id="editor"></div>
+      <div class="io-box" id="io-box">
+        <div id="input">
+          <textarea id="inputBox" name="inputBox" rows="4" cols="50"></textarea>
+        </div>
+        <div id="output"><p>some output!</p></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+
