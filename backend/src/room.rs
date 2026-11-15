@@ -7,7 +7,12 @@ pub type RoomId = String;
 pub type UserId = String;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CodeChange {
+pub struct CodeChanges {
+    changes: Vec<CodeChange>
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CodeChange {
     range_offset: u32,
     range_length: u32,
     text: String,
@@ -97,16 +102,18 @@ impl RoomManager {
         }
     }
 
-    pub fn change_source(&mut self, room_id: &RoomId, user_id: &UserId, change: CodeChange) {
+    pub fn change_source(&mut self, room_id: &RoomId, user_id: &UserId, changes: CodeChanges) {
         // CodeChange -> range_offset (place where text is place)
         //            -> range_length (range of text that is placed) -> Applies only to deletion
         //            -> the text itself
         if let Some(room) = self.rooms.get_mut(room_id) {
             if room.writer == user_id.to_string() {
-                if change.range_length != 0 {
-                    room.source.replace_range((change.range_offset as usize)..((change.range_length+change.range_offset) as usize), &change.text);
-                } else {
-                    room.source.insert_str(change.range_offset as usize, &change.text);
+                for change in changes.changes {
+                    if change.range_length != 0 {
+                        room.source.replace_range((change.range_offset as usize)..((change.range_length+change.range_offset) as usize), &change.text);
+                    } else {
+                        room.source.insert_str(change.range_offset as usize, &change.text);
+                    }
                 }
             }
         }

@@ -8,7 +8,7 @@ use futures_util::{SinkExt, StreamExt};
 use uuid::Uuid;
 use std::process::Stdio;
 
-use crate::{AppState, room::{self, CodeChange, CursorChange, RoomId}};
+use crate::{AppState, room::{self, CodeChanges, CursorChange, RoomId}};
 use crate::room::{UserId, RoomManager};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -184,7 +184,7 @@ fn process_sync_message(client_msg: ClientMessage, manager: &mut room::RoomManag
             };
         },
         "code_change" => {
-            let code_data: CodeChange = 
+            let code_data: CodeChanges = 
                 match serde_json::from_str(&client_msg.data) {
                     Ok(data) => data,
                     Err(e) => {
@@ -200,7 +200,7 @@ fn process_sync_message(client_msg: ClientMessage, manager: &mut room::RoomManag
                 let message = serde_json::json!({
                     "action": "code_update",
                     "user_id": user_id,
-                    "change": code_data,
+                    "changes": code_data,
                 });
                 RoomManager::broadcast(manager, room_id, &message.to_string());
             }

@@ -6,6 +6,10 @@ export interface CodeChange {
   text: string;
 };
 
+export interface CodeChanges {
+    changes: CodeChange[];
+};
+
 export function createEditor(container: HTMLElement) {
   return monaco.editor.create(container, {
     language: "cpp",
@@ -15,52 +19,59 @@ export function createEditor(container: HTMLElement) {
   });
 }
 
-export function captureChange(model: monaco.editor.ITextModel | null, applyingRemoteChange: boolean, onChange: (change: CodeChange) => void) {
-  if (!model || applyingRemoteChange) {
-    return;
-  }
-  const changeDisposable = model.onDidChangeContent((event: monaco.editor.IModelContentChangedEvent) => {
-      // Get the updated content
-      // const currentCode = model.getValue();
-      const lastChange = event.changes[event.changes.length-1];
-      // console.log('Editor content changed!', currentCode);
-      
-      // The 'event' object contains metadata about what exactly changed
-      // console.log('Changes details:', event.changes);
-
-      if(!lastChange)
+export function captureChange(model: monaco.editor.ITextModel | null, applyingRemoteChange: boolean, onChange: (change: CodeChanges) => void) {
+    if (!model || applyingRemoteChange) {
         return;
-      
-      const change: CodeChange = {
-        // currentCode: currentCode,
-        range_offset: lastChange.rangeOffset,
-        range_length: lastChange.rangeLength,
-        text: lastChange.text
-      };
+    }
+    const changeDisposable = model.onDidChangeContent((event: monaco.editor.IModelContentChangedEvent) => {
+        // Get the updated content
+        // const currentCode = model.getValue();
+        const lastChange = event.changes[event.changes.length-1];
+        // console.log("Changes: ", event.changes);
+        // console.log("Full text: ", currentCode);
+        // The 'event' object contains metadata about what exactly changed
+        // console.log('Changes details:', event.changes);
 
-      onChange(change);
-  });
-  return changeDisposable;
+        if(!lastChange)
+            return;
+      
+        const changes: CodeChanges = {
+             changes: event.changes.map(change => ({
+                 range_offset: change.rangeOffset,
+                 range_length: change.rangeLength,
+                 text: change.text,
+             }))     
+        };
+
+        onChange(changes);
+    });
+    return changeDisposable;
 }
 
-export function applyChange(editor: monaco.editor.IStandaloneCodeEditor, change: CodeChange) {
-  const model = editor.getModel()!;
-
-    const start = model.getPositionAt(change.range_offset);
-    const end = model.getPositionAt(
-        change.range_offset + change.range_length
+export function applyChanges(editor: monaco.editor.IStandaloneCodeEditor, changes: CodeChanges) {
+    const model = editor.getModel()!;
+    const sortedChanges = [...changes.changes].sort(
+        (a, b) => b.range_offset - a.range_offset
     );
 
-    model.applyEdits([{
-        range: new monaco.Range(
-            start.lineNumber,
-            start.column,
-            end.lineNumber,
-            end.column
-        ),
-        text: change.text,
-        forceMoveMarkers: true,
-    }]);
+    for (const change of sortedChanges) {
+        const start = model.getPositionAt(change.range_offset);
+        const end = model.getPositionAt(
+            change.range_offset + change.range_length
+        );
+
+        model.applyEdits([{
+            range: new monaco.Range(
+                start.lineNumber,
+                start.column,
+                end.lineNumber,
+                end.column
+            ),
+            text: change.text,
+            forceMoveMarkers: true,
+        }]);
+        
+    }
 }
 
 export function updateRemoteCursor(

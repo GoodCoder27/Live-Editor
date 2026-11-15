@@ -1,5 +1,5 @@
 import "./style.css";
-import { createEditor, captureChange, applyChange, updateRemoteCursor, updateRemoteSelection } from "./editor.ts";
+import { createEditor, captureChange, applyChanges, updateRemoteCursor, updateRemoteSelection } from "./editor.ts";
 import { initSplits, updateHorizontalSplit } from "./layout.ts";
 import { initMobileTabs, ensureDefaultMobilePane } from "./tabs.ts";
 import * as monaco from "monaco-editor"
@@ -100,7 +100,7 @@ ws.onmessage = (event: MessageEvent) => {
             }
             applyingRemoteChange = true;
             try {
-                applyChange(editor, response.change);
+                applyChanges(editor, response.changes);
             } finally {
                 applyingRemoteChange = false;
             }
@@ -152,10 +152,10 @@ ws.onerror = (error: Event) => {
 };
 // editor change
 const model = editor.getModel();
-captureChange(model, applyingRemoteChange, (change) => {
+captureChange(model, applyingRemoteChange, (changes) => {
     const message: ClientMessage = {
         action: "code_change",
-        data: JSON.stringify(change), 
+        data: JSON.stringify(changes), 
     };
 
     if (applyingRemoteChange)
