@@ -8,11 +8,8 @@
   </head>
   <body>
     <div id="topbar">
-      <button class="top-item" id="home">HOME</button>
-      <button class="top-item" id="file">v FILE</button>
       <button class="top-item" id="run">RUN</button>
-      <button class="top-item" id="credit">GITHUB</button>      
-      <button class="top-item" id="share">SHARE</button>
+      <button class="top-item" id="share" onclick="copyCurrentUrl(this)">SHARE</button>
     </div>
     <div class="main-area" id="main-area">
       <!-- Mobile Tab Switcher (Only visible on small screens) -->
@@ -31,5 +28,17 @@
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
+  <script>
+    async function copyCurrentUrl(button) {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        const originalText = button.textContent;
+        button.textContent = 'Copied!';
+        setTimeout(() => (button.textContent = originalText), 2000);
+      } catch (err) {
+        console.error('Failed to copy: ', err);
+      }
+    }
+  </script>
 </html>
 
