@@ -67,18 +67,6 @@ pub async fn handle_socket(socket: WebSocket, manager: AppState,
                     };
                 if client_msg.action == "run" {
                     let input: String = client_msg.data.clone();
-                        // match serde_json::from_str(&client_msg.data) {
-                        //     Ok(data) => data,
-                        //     Err(e) => {
-                        //         let err_msg = ServerMessage {
-                        //             status: "error".to_string(),
-                        //             data: format!("Invalid input data: {e}")
-                        //         };
-                        //         let _ = sender.send(Message::Text(serde_json::to_string(&err_msg).unwrap().into())).await;
-                        //         continue;
-                        //     }
-                        // };
-
                     let code_opt = if let Some((room_id, user_id)) = &membership {
                         let mut mn = manager.lock().await;
                         Some(RoomManager::get_source(&mut mn, room_id, user_id))
@@ -98,7 +86,7 @@ pub async fn handle_socket(socket: WebSocket, manager: AppState,
                             stde = stderr;
                         }
                         Err(e) => {
-                            println!("Execution failed: {e}");
+                            eprintln!("Execution failed: {e}");
                         }
                     }
 
@@ -156,6 +144,7 @@ pub async fn handle_socket(socket: WebSocket, manager: AppState,
     }
 }
 
+// process everything except for "run"
 fn process_sync_message(client_msg: ClientMessage, manager: &mut room::RoomManager,
     tx: &UnboundedSender<String>, membership: &mut Option<(RoomId, UserId)>) -> ServerMessage {
     match client_msg.action.as_str() {
@@ -171,6 +160,7 @@ fn process_sync_message(client_msg: ClientMessage, manager: &mut room::RoomManag
                     }
                 };
 
+            // joins a room, if a room exists, then user is a viewer, otherwise an editor
             let user_id: UserId = join_data.user_id;
             let room_id: RoomId = join_data.room_id; 
             let mut writer: bool = false;
@@ -246,19 +236,7 @@ fn process_sync_message(client_msg: ClientMessage, manager: &mut room::RoomManag
                 data: "Cursor moved".to_string()
             };
         },
-        "user_joined" => {
-            return ServerMessage {
-                status: "success".to_string(),
-                data: format!("New User {} joined the room", client_msg.data)
-            };
-        },
-        "user_left" => {
-            return ServerMessage {
-                status: "success".to_string(),
-                data: format!("User {} left the room", client_msg.data)
-            };
-        },
-        "input_update" => {
+       "input_update" => {
             let input: String = client_msg.data;
 
             if let Some((room_id, user_id)) = membership {
@@ -353,42 +331,3 @@ async fn run_cpp(
 
     Ok((stdout, stderr))
 }
-
-/*
-this is a working example of a simple websocket
-async fn send_response(socket: &mut WebSocket, response: ServerMessage) -> Result<(), axum::Error> {
-    let json = serde_json::to_string(&response).expect("Failed to serialize server message");
-
-    socket.send(Message::Text(json.into())).await
-}
-
-    while let Some(result) = socket.recv().await {
-        let msg = match result {
-            Ok(msg) => msg,
-            Err(e) => {
-                eprintln!("WebSocket error: {e}");
-                break;
-            }
-        };
-
-        let Message::Text(text) = msg else {
-            continue;
-        };
-
-        let client_msg: ClientMessage =
-            match serde_json::from_str(&text) {
-                Ok(msg) => msg,
-                Err(e) => {
-                    eprintln!("Invalid client message: {e}");
-                    continue;
-                }
-            };
-
-        let mut mn = manager.lock().await;
-        let response = process_message(client_msg, &mut mn);
-
-        if send_response(&mut socket, response).await.is_err() {
-            eprintln!("Client disconnected");
-            break;
-        }
-    }*/

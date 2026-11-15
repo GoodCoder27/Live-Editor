@@ -4,7 +4,7 @@ import type * as monaco from "monaco-editor";
 let horizontalSplit: any = null;
 let verticalSplit: any = null;
 
-export function initSplits(editor: monaco.editor.IStandaloneCodeEditor | null) {
+export function initSplits() {
   // Initialize vertical split globally (runs on both mobile and desktop)
   if (!verticalSplit) {
     verticalSplit = Split(['#input', '#output'], {

@@ -157,7 +157,7 @@ impl RoomManager {
             if room.users.is_empty() {
                 self.rooms.remove(room_id);
             }
-            println!("Removed user, {} from room, {}", user_id, room_id);
+            //println!("Removed user, {} from room, {}", user_id, room_id);
         }
     }
 }

@@ -1,17 +1,10 @@
 import * as monaco from "monaco-editor";
 
 export interface CodeChange {
-  //currentCode: string;
   range_offset: number;
   range_length: number;
   text: string;
 };
-
-// readOnly: true
-// editor.updateOptions({
-//readOnly: true
-// });
-// editor-delta-decorations
 
 export function createEditor(container: HTMLElement) {
   return monaco.editor.create(container, {
@@ -28,12 +21,12 @@ export function captureChange(model: monaco.editor.ITextModel | null, applyingRe
   }
   const changeDisposable = model.onDidChangeContent((event: monaco.editor.IModelContentChangedEvent) => {
       // Get the updated content
-      const currentCode = model.getValue();
+      // const currentCode = model.getValue();
       const lastChange = event.changes[event.changes.length-1];
-      console.log('Editor content changed!', currentCode);
+      // console.log('Editor content changed!', currentCode);
       
       // The 'event' object contains metadata about what exactly changed
-      console.log('Changes details:', event.changes);
+      // console.log('Changes details:', event.changes);
 
       if(!lastChange)
         return;

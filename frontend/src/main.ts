@@ -24,7 +24,7 @@ function displayOutput(stderr: string, stdout: string) {
 }
 
 // 2. Initialize static vertical split
-initSplits(editor);
+initSplits();
 
 // 3. Initialize mobile tab event listeners
 initMobileTabs(editor, editorPane, ioPane);
@@ -63,8 +63,6 @@ const remoteSelections = new Map<
     string,
     monaco.editor.IEditorDecorationsCollection
 >();
-//updateRemoteCursor(editor, userId, 1, 3, remoteCursors);
-//updateRemoteSelection(editor, userId, 1, 1, 1, 3, remoteSelections);
 
 // websocket
 interface ClientMessage {
@@ -72,15 +70,8 @@ interface ClientMessage {
         | "join_room"
         | "code_change"
         | "cursor_change"
-        | "user_joined"
-        | "user_left"
         | "run"
         | "input_update"
-    data: unknown;
-}
-
-interface ServerMessage {
-    status: string;
     data: unknown;
 }
 
@@ -120,7 +111,6 @@ ws.onmessage = (event: MessageEvent) => {
             inputBox.value = response.input;
         }
         if (response.action == "cursor_update") {
-            console.log("Cursor moved");
             if (response.user_id == userId) {
                 return;
             }
@@ -137,7 +127,7 @@ ws.onmessage = (event: MessageEvent) => {
         if (response.action == "output") {
             displayOutput(response.stderr, response.stdout);
         }
-        console.log("Received from server:", response);
+        // console.log("Received from server:", response);
         if (response.action == "join_room") {
             if (response.writer == true) {
                 editor.updateOptions({
@@ -145,7 +135,7 @@ ws.onmessage = (event: MessageEvent) => {
                 });
                 inputBox.disabled = false;
                 writer = true;
-                console.log("writer joined the room");
+                // console.log("writer joined the room");
             }
         }
     } catch (error) {
@@ -177,7 +167,7 @@ captureChange(model, applyingRemoteChange, (change) => {
 });
 // input box change
 inputBox.addEventListener("input", () => {
-    console.log("Input changed:", inputBox.value);
+    // console.log("Input changed:", inputBox.value);
     if (!writer) return;
 
     let message: ClientMessage = {
@@ -189,7 +179,6 @@ inputBox.addEventListener("input", () => {
         ws.send(JSON.stringify(message));
     }
 });
-
 // capture selection and cursor change
 editor.onDidChangeCursorSelection((event) => {
     const selection = event.selection;
@@ -232,9 +221,9 @@ editor.onDidChangeCursorSelection((event) => {
 });
 
 const runBtn = document.getElementById("run") as HTMLButtonElement;
-runBtn.addEventListener("click", (event: MouseEvent) => {
+runBtn.addEventListener("click", () => {
     if (writer) {
-        console.log("run clicked", event.currentTarget);
+        // console.log("run clicked", event.currentTarget);
         const message: ClientMessage = {
             action: "run",
             data: inputBox.value,
