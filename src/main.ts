@@ -15,6 +15,13 @@ const editor = createEditor(container);
 
 const editorPane = document.getElementById('editor')!;
 const ioPane = document.getElementById('io-box')!;
+const inputBox = document.getElementById("inputBox") as HTMLTextAreaElement;
+const outputText = document.getElementById("output") as HTMLDivElement;
+inputBox.disabled = true;
+
+function displayOutput(stderr: string, stdout: string) {
+    outputText.textContent = stderr + stdout;
+}
 
 // 2. Initialize static vertical split
 initSplits(editor);
@@ -68,7 +75,7 @@ interface ClientMessage {
         | "user_joined"
         | "user_left"
         | "run"
-        | "output";
+        | "input_update"
     data: unknown;
 }
 
@@ -107,6 +114,11 @@ ws.onmessage = (event: MessageEvent) => {
                 applyingRemoteChange = false;
             }
         }
+        if (response.action == "input_update") {
+            if (response.user_id == userId) return;
+
+            inputBox.value = response.input;
+        }
         if (response.action == "cursor_update") {
             console.log("Cursor moved");
             if (response.user_id == userId) {
@@ -122,12 +134,16 @@ ws.onmessage = (event: MessageEvent) => {
                 updateRemoteSelection(editor, userId, 0, 0, 0, 0, remoteSelections);
             }
         }
+        if (response.action == "output") {
+            displayOutput(response.stderr, response.stdout);
+        }
         console.log("Received from server:", response);
         if (response.action == "join_room") {
             if (response.writer == true) {
                 editor.updateOptions({
                     readOnly: false
                 });
+                inputBox.disabled = false;
                 writer = true;
                 console.log("writer joined the room");
             }
@@ -144,7 +160,7 @@ ws.onclose = () => {
 ws.onerror = (error: Event) => {
     console.error("WebSocket error:", error);
 };
-
+// editor change
 const model = editor.getModel();
 captureChange(model, applyingRemoteChange, (change) => {
     const message: ClientMessage = {
@@ -159,6 +175,21 @@ captureChange(model, applyingRemoteChange, (change) => {
         ws.send(JSON.stringify(message));
     }
 });
+// input box change
+inputBox.addEventListener("input", () => {
+    console.log("Input changed:", inputBox.value);
+    if (!writer) return;
+
+    let message: ClientMessage = {
+        action: "input_update",
+        data: inputBox.value,
+    };
+
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(message));
+    }
+});
+
 // capture selection and cursor change
 editor.onDidChangeCursorSelection((event) => {
     const selection = event.selection;
@@ -202,13 +233,14 @@ editor.onDidChangeCursorSelection((event) => {
 
 const runBtn = document.getElementById("run") as HTMLButtonElement;
 runBtn.addEventListener("click", (event: MouseEvent) => {
-    console.log("run clicked", event.currentTarget);
+    if (writer) {
+        console.log("run clicked", event.currentTarget);
+        const message: ClientMessage = {
+            action: "run",
+            data: inputBox.value,
+        }
 
-    const message: ClientMessage = {
-        action: "run",
-        data: model!.getValue(),
+        ws.send(JSON.stringify(message));
     }
-
-    ws.send(JSON.stringify(message));
 });
 
