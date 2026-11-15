@@ -1,0 +1,7 @@
+# Node
+frontend/node_modules
+frontend/dist
+
+# Rust
+backend/target
+backend/run.sh
