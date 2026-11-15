@@ -112,6 +112,18 @@ impl RoomManager {
         }
     }
 
+    pub fn get_source(&mut self, room_id: &RoomId, user_id: &UserId) -> String {
+        if let Some(room) = self.rooms.get_mut(room_id) {
+            if room.writer == user_id.to_string() {
+                return room.source.clone();
+            } else {
+                return "".to_string();
+            }
+        } else {
+            return "".to_string();
+        }
+    }
+
     pub fn update_position(&mut self, room_id: &RoomId, user_id: &UserId, cursor_data: CursorChange) {
         if let Some(room) = self.rooms.get_mut(room_id) {
             if room.writer == user_id.to_string() {

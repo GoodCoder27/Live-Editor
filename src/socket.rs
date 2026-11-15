@@ -2,8 +2,11 @@ use axum::{
     extract::{State, ws::{Message, WebSocket, WebSocketUpgrade}}, response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::{fs, io::AsyncWriteExt, process::Command, sync::mpsc::{self, UnboundedSender}};
 use futures_util::{SinkExt, StreamExt};
+
+use uuid::Uuid;
+use std::process::Stdio;
 
 use crate::{AppState, room::{self, CodeChange, CursorChange, RoomId}};
 use crate::room::{UserId, RoomManager};
@@ -62,17 +65,74 @@ pub async fn handle_socket(socket: WebSocket, manager: AppState,
                             continue;
                         }
                     };
+                if client_msg.action == "run" {
+                    let input: String = client_msg.data.clone();
+                        // match serde_json::from_str(&client_msg.data) {
+                        //     Ok(data) => data,
+                        //     Err(e) => {
+                        //         let err_msg = ServerMessage {
+                        //             status: "error".to_string(),
+                        //             data: format!("Invalid input data: {e}")
+                        //         };
+                        //         let _ = sender.send(Message::Text(serde_json::to_string(&err_msg).unwrap().into())).await;
+                        //         continue;
+                        //     }
+                        // };
 
-                let response = {
-                    let mut mn = manager.lock().await;
-                    process_message(client_msg, &mut mn, &tx, &mut membership)
-                };                
-                let json = serde_json::to_string(&response)
-                    .expect("Failed to serialize response");
+                    let code_opt = if let Some((room_id, user_id)) = &membership {
+                        let mut mn = manager.lock().await;
+                        Some(RoomManager::get_source(&mut mn, room_id, user_id))
+                    } else {
+                        None
+                    };
 
-                if sender.send(Message::Text(json.into())).await.is_err() {
-                    eprintln!("Client disconnected");
-                    break;
+                    let Some(code) = code_opt else {
+                        continue;
+                    };
+
+                    let mut stdo = "".to_string();
+                    let mut stde = "".to_string();
+                    match run_cpp(code, input).await {
+                        Ok((stdout, stderr)) => {
+                            stdo = stdout;
+                            stde = stderr;
+                        }
+                        Err(e) => {
+                            println!("Execution failed: {e}");
+                        }
+                    }
+
+                    if let Some((room_id, _)) = &membership {
+                        let mut mn = manager.lock().await;
+                        let message = serde_json::json!({
+                            "action": "output",
+                            "stdout": stdo,
+                            "stderr": stde,
+                        });
+                        RoomManager::broadcast(&mut mn, room_id, &message.to_string());
+                    }
+                    let response = ServerMessage {
+                        status: "success".to_string(),
+                        data: "Code executed successfully".to_string(),
+                    };
+
+                    let json = serde_json::to_string(&response).expect("Failed to serialize response");
+                    if sender.send(Message::Text(json.into())).await.is_err() {
+                        eprintln!("Client disconnected");
+                        break;
+                    }
+               } else {
+                    let response = {
+                        let mut mn = manager.lock().await;
+                        process_sync_message(client_msg, &mut mn, &tx, &mut membership)
+                    };                
+                    let json = serde_json::to_string(&response)
+                        .expect("Failed to serialize response");
+
+                    if sender.send(Message::Text(json.into())).await.is_err() {
+                        eprintln!("Client disconnected");
+                        break;
+                    }    
                 }
             }
             // Receive messages queued by RoomManager::broadcast().
@@ -96,7 +156,7 @@ pub async fn handle_socket(socket: WebSocket, manager: AppState,
     }
 }
 
-fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager,
+fn process_sync_message(client_msg: ClientMessage, manager: &mut room::RoomManager,
     tx: &UnboundedSender<String>, membership: &mut Option<(RoomId, UserId)>) -> ServerMessage {
     match client_msg.action.as_str() {
         "join_room" => {
@@ -197,22 +257,103 @@ fn process_message(client_msg: ClientMessage, manager: &mut room::RoomManager,
                 status: "success".to_string(),
                 data: format!("User {} left the room", client_msg.data)
             };
-        }
-        "run" => {
-            return ServerMessage {
-                status: "success".to_string(),
-                data: format!("running code: {}", client_msg.data)
-            };
         },
-        "output" => {
+        "input_update" => {
+            let input: String = client_msg.data;
+
+            if let Some((room_id, user_id)) = membership {
+                let message = serde_json::json!({
+                    "action": "input_update",
+                    "user_id": user_id,
+                    "input": input,
+                });
+                RoomManager::broadcast(manager, room_id, &message.to_string());
+            }
+            
             return ServerMessage {
                 status: "success".to_string(),
-                data: "outputing the result".to_string()
+                data: "you don't need that".to_string()
             };
         },
         _ => ServerMessage { status: "error".to_string(), data: format!("Uknown action: {}", client_msg.action) } 
     }
 }
+
+async fn run_cpp(
+    code: String,
+    input: String,
+) -> Result<(String, String), Box<dyn std::error::Error>> {
+
+    // Create a unique temporary directory.
+    let workdir = format!("/tmp/ide-{}", Uuid::new_v4());
+    fs::create_dir(&workdir).await?;
+
+    // Save the source code.
+    let source_path = format!("{}/main.cpp", workdir);
+    fs::write(&source_path, code).await?;
+
+    // Allow the container's UID 10001 to access the directory.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::set_permissions(
+            &workdir,
+            std::fs::Permissions::from_mode(0o777),
+        ).await?;
+    }
+
+    // Start Docker.
+    let mut child = Command::new("docker")
+        .args([
+            "run",
+            "--rm",
+            "-i",
+            "--memory=500m",
+            "--memory-swap=500m",
+            "--cpus=1",
+            "--pids-limit=64",
+            "--network=none",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--read-only",
+            "--user=10001:10001",
+        ])
+        .arg(format!("--mount=type=bind,src={},dst=/work", workdir))
+        .args([
+            "--tmpfs",
+            "/tmp:rw,exec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700",
+            "ide",
+            "bash",
+            "-c",
+            "cd /work && \
+             timeout --signal=KILL 15s \
+             g++ -std=c++20 -O2 -Wall -Wextra main.cpp -o main && \
+             timeout --signal=KILL 2s ./main",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    // Pass the user's input to the C++ program.
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(input.as_bytes()).await?;
+    }
+
+    // Wait for Docker to finish and collect its output.
+    let output = child.wait_with_output().await?;
+
+    // Convert bytes into Strings.
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+
+    // Remove the temporary directory.
+    fs::remove_dir_all(&workdir).await?;
+
+    Ok((stdout, stderr))
+}
+
 /*
 this is a working example of a simple websocket
 async fn send_response(socket: &mut WebSocket, response: ServerMessage) -> Result<(), axum::Error> {
